@@ -67,6 +67,7 @@ class SplashMiddleware(object):
 
         args = splash_options.setdefault('args', {})
         args.setdefault('url', request.url)
+
         body = json.dumps(args, ensure_ascii=False)
 
         if 'timeout' in args:
@@ -93,11 +94,14 @@ class SplashMiddleware(object):
         splash_base_url = splash_options.get('splash_url', self.splash_base_url)
         splash_url = urljoin(splash_base_url, endpoint)
 
+        splash_meta = meta.copy()
+        splash_meta.update(splash_options.get('meta', {}))
+
         req_rep = request.replace(
             url=splash_url,
             method='POST',
             body=body,
-
+            meta=splash_meta,
             # FIXME: original HTTP headers (including cookies)
             # are not respected.
             headers=Headers({'Content-Type': 'application/json'}),

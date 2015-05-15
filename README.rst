@@ -166,6 +166,9 @@ To render the requests with Splash use 'splash' Request meta key::
      It is similar to SINGLE_SLOT policy, but can be different if you access
      other services on the same address as Splash.
 
+* ``meta['splash']['meta']`` allows to set meta attributes for the Splash
+  requests.
+
 Examples
 ========
 
