@@ -2,7 +2,7 @@
 from __future__ import absolute_import
 import json
 import logging
-from urlparse import urljoin
+from urlparse import urljoin, urlparse
 from scrapy.exceptions import NotConfigured
 
 from scrapy import log
@@ -68,6 +68,9 @@ class SplashMiddleware(object):
         args = splash_options.setdefault('args', {})
         args.setdefault('url', request.url)
 
+        if meta.get('proxy'):
+            self.setup_variables_for_proxy_usage(args, meta, splash_options, request.headers)
+
         body = json.dumps(args, ensure_ascii=False)
 
         if 'timeout' in args:
@@ -112,6 +115,51 @@ class SplashMiddleware(object):
 
         self.crawler.stats.inc_value('splash/%s/request_count' % endpoint)
         return req_rep
+
+    def setup_variables_for_proxy_usage(self, args, meta, splash_options, headers):
+        """Makes the proxy usage via Splash transparent
+
+        Uses the proxy defined in the request's meta attribute to build a request
+        using a Splash lua script.
+        It also forwards the request's headers to the proxy, as some proxies
+        require some headers to be defined).
+        """
+        def headers_as_lua_list():
+            splash_headers = ['["%s"] = "%s"' % (k, v[0])
+                              for k,v in headers.iteritems()]
+
+            return ",\n".join(splash_headers)
+
+        def baseurl_as_lua_str():
+            if args.get('baseurl'):
+                return '"%s"' % args['baseurl']
+            return 'nil'
+
+        parsed_proxy_url = urlparse(meta['proxy'])
+        host = parsed_proxy_url.hostname
+        port = parsed_proxy_url.port
+
+        script = """
+        function main(splash)
+            splash:on_request(function(request)
+                request:set_proxy{
+                    host = "%s",
+                    port = %s,
+                }
+            end)
+
+            splash:set_custom_headers({ %s })
+
+            assert(splash:go{splash.args.url, baseurl=%s})
+            return splash:html()
+        end
+        """
+
+        args['lua_source'] = script % (host, port, headers_as_lua_list(), baseurl_as_lua_str())
+        splash_options['endpoint'] = 'execute'
+
+        # prevents sending requests to Splash via the proxy
+        del(meta['proxy'])
 
     def process_response(self, request, response, spider):
         splash_options = request.meta.get("_splash_processed")
